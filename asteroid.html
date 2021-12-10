@@ -1,0 +1,431 @@
+<html>
+
+<head>
+<title>HTML5 Canvas &mdash; Demo asteroid</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF8">
+<script type="text/javascript" src="dat.gui.js"></script>
+
+<style>
+    canvas {border: solid 1px black}
+    td {vertical-align: top;}
+</style>
+</head>
+
+<script type="text/javascript">
+    var canvas;
+    var ctx;
+    var w,h;
+   
+    var model;
+    //var keyArray = new Array(4);
+    function initModel() {
+        model = {
+            // Position
+            'x0': canvas.width/2,
+            'y0': canvas.height/2,
+            'bx': canvas.width/2,
+            'by': canvas.height/2,
+            'angle': 0,
+            // Velocity
+            'vx': 0,
+            'vy': 0,
+            'bx': 0,
+            'by': 0,
+            'ax': 0,
+            'ay': 0,
+            'angleVelocity': 180, // 1 turn in 2s
+            // Acceleration
+            'fixedAcceleration': 0.1, // 0.1 pix/s velocity if accelerate for 1s
+            'keyboard' : [{ArrowUp: false, ArrowDown: false, ArrowRight: false, ArrowLeft: false, 
+                Space: false}]
+            //'mode' : 1
+        }
+    }
+   
+    /* ### GUI ### */
+    var gui;		
+    function initGUI() 
+    {
+        gui = new dat.GUI({ autoPlace: true });
+
+        gui.add(model,'x0').min(0).max(w).step(1)
+                            .onChange(onModelChange)//.listen()
+        gui.add(model,'y0').min(0).max(h).step(1)
+                            .onChange(onModelChange)//.listen()
+        gui.add(model,'angle').min(-180).max(180).step(1)
+                               .onChange(onModelChange)//.listen()
+        gui.add(model,'vx').min(-50).max(+50).step(0.1)
+                            .onChange(onModelChange)//.listen()
+        gui.add(model,'vy').min(-50).max(+50).step(0.1)
+                            .onChange(onModelChange)//.listen()
+        gui.add(model,'ax').min(-50).max(+50).step(0.1)
+                            .onChange(onModelChange)//.listen()
+        gui.add(model,'ay').min(-50).max(+50).step(0.1)
+                            .onChange(onModelChange)//.listen()
+        gui.add(model,'angleVelocity').min(0).max(720).step(0.1)
+           .onChange(onModelChange) // 720 deg max in 1s
+        gui.add(model,'fixedAcceleration').min(0).max(+50).step(0.1)
+            .onChange(onModelChange)
+        
+        //var parent = document.getElementById('controls');      
+        //parent.appendChild(gui.domElement);
+    }
+    // GUI callback when parameters are changed manually in the GUI
+    function onModelChange() {
+        drawAll()
+    }
+
+    /* ### Keyboard ### */
+    var currentlyPressedKeys = {};
+    function initKeys(canvas) {
+        // Make sure the canvas can receive the key events
+        canvas.setAttribute('tabindex','0');
+        canvas.focus();
+
+        // Register the keyDown and keyUp events
+        canvas.addEventListener( "keydown", onKeyDown, true);
+        canvas.addEventListener( "keyup", onKeyUp, true);
+    }
+    // Callbacks for discrete key events
+    function onKeyDown(event) {
+        // Uncomment this to display key presses to find the keyCodes
+        console.log(event)
+        event.preventDefault();
+
+        // 1. Save keyboard state to be used in animate()
+        
+        if (event.code == "KeyR") { // R
+            console.log('Pressed "R"')
+        }
+        if (event.code == "ArrowLeft" || event.code == "KeyJ") { // Left
+            console.log('Pressed "ArrowLeft"')
+            // Modify the keyboard state to record that 
+            // the player started turning left
+            model.keyboard.ArrowLeft = true;
+            // Do not change x,y directly, this will be done in animate()
+        }
+
+        // Code for ArrowRight, ArrowUp, ArrowDown
+        if (event.code == "ArrowUp" || event.code == "KeyI") { // Left
+            console.log('Pressed "ArrowUp"')
+            model.keyboard.ArrowUp = true;
+            //console.log(model.keyboard.ArrowUp);
+            //model.keyboard["ArrowUp"] = true
+
+        }
+        if (event.code == "ArrowDown" || event.code == "KeyK") { // Left
+            console.log('Pressed "ArrowDown"')
+            model.keyboard.ArrowDown = true;
+        }
+        if (event.code == "ArrowRight" || event.code == "KeyL") { // Left
+            console.log('Pressed "ArrowRight"')
+            model.keyboard.ArrowRight = true;
+        }
+        
+        // 2. Handle single key presses (for example for firing the gun)
+        
+        if (event.code == "Space" && !model.keyboard.Space) { // Space
+            // Modify the model to initialize a bullet
+            // that will be animated in animate()
+            model.bx = model.x0;
+            model.by = model.y0;
+            model.keyboard.Space = true;
+            // and drawn in drawAll()
+        }
+        
+        // MVC: DO NOT DRAW ANYTHING IN onKeyDown()
+    }
+    function onKeyUp(event) {
+        /* Save key state here to reuse them in animate */
+        
+        if (event.code == "ArrowLeft" || event.code == "KeyJ") { // Left
+            console.log('Pressed "ArrowLeft"')
+            // Modify the keyboard state to record that 
+            // the player stopped turning left
+            model.keyboard.ArrowLeft = false;
+            // Do not change x,y directly, this will be done in animate()
+        }
+
+        // Code for ArrowRight, ArrowUp, ArrowDown
+        if (event.code == "ArrowUp" || event.code == "KeyI") { // Up
+            console.log('Pressed "ArrowUp"')
+            //model.keyboard = false
+            model.keyboard.ArrowUp = false;
+            //console.log(model.keyboard.ArrowUp);
+        }
+        if (event.code == "ArrowDown" || event.code == "KeyK") { // Down
+            console.log('Pressed "ArrowDown"')
+            model.keyboard.ArrowDown = false;
+        }
+        if (event.code == "ArrowRight" || event.code == "KeyL") { // Right
+            console.log('Pressed "ArrowRight"')
+            model.keyboard.ArrowRight = false;
+        }
+        
+        // MVC: DO NOT DRAW ANYTHING IN onKeyUp()
+    }
+
+    function isKeyDown(key) {
+        //onKeyDown()
+        //console.log(key == "ArrowUp");
+        if (key == "ArrowUp") {
+            //console.log(model.keyboard);
+            return model.keyboard.ArrowUp;
+        }
+        if (key == "ArrowDown") {
+            return model.keyboard.ArrowDown;
+        }
+        if (key == "ArrowRight") {
+           return model.keyboard.ArrowRight;
+        }
+        if (key == "ArrowLeft") {
+            return model.keyboard.ArrowLeft;
+        }
+        //else {
+           // return model.keyboard.ArrowUp = false;
+        //}
+    }
+    
+    /* ### Timing and main loop ### */
+    var startTime = 0;
+    var lastTime = 0;
+    //var time;
+    var elapsed = 0, totalElapsed = 0;
+    function updateTime() {
+        var timeNow = new Date().getTime() / 1000; // All expressed in seconds
+        if (lastTime != 0) {
+            elapsed = timeNow - lastTime;
+        } else {
+            startTime = timeNow;
+        }
+        lastTime = timeNow;
+        totalElapsed = timeNow - startTime;
+    }
+    
+    // Timer callback for animations
+    function onTick() {
+        //if (model.mode>0) {
+            updateTime()
+            animate()
+            drawAll()
+        //}
+        requestAnimationFrame(onTick);
+    }
+    // Main animation function, called at each tick
+    function animate() {
+        //la aceleración en 0 cuando no se presiona tecla y está al orincipio porque siempre
+        //la función onTick la está llamando para ponerla en 0 si no se está presionando el key
+        model.ax = 0;
+        model.ay = 0;
+
+        dx = Math.sin(model.angle*Math.PI/180);
+        dy = Math.cos(model.angle*Math.PI/180);
+
+        // Compute ax,ay based on keyboard state
+        //console.log(isKeyDown("ArrowUp"));
+        //console.log(isKeyDown("ArrowUp"));
+        //console.log(isKeyDown(model.keyboard.ArrowUp));
+        if (isKeyDown("ArrowUp")) {
+            model.ax = dx * model.fixedAcceleration
+            model.ay = dy * model.fixedAcceleration * -1
+        }
+        if (isKeyDown("ArrowDown")) {
+            model.ax = dx * model.fixedAcceleration * -1
+            model.ay = dy * model.fixedAcceleration
+        }
+       //console.log(isKeyDown("ArrowUp"))
+       //console.log(isKeyDown("ArrowDown"))
+        //if (model.keyboard.ArrowUp == false && model.keyboard.ArrowDown) {
+            //&& isKeyDown("ArrowDown") == false) {
+            //console.log("feo")
+            //model.ax = 0;
+            //model.ay = 0;
+        //}
+        if (isKeyDown("ArrowRight")) {
+            model.angle = model.angle + model.angleVelocity * elapsed
+        }
+        if (isKeyDown("ArrowLeft")) {
+            model.angle = model.angle + model.angleVelocity * elapsed * -1
+        }
+        
+        // Update vx,vy based on ax,ay
+        model.vx = model.vx + model.ax * elapsed
+        model.vy = model.vy + model.ay * elapsed
+        
+        // Update x,y based on vx,vy
+        model.x0 = model.x0 + model.vx * elapsed
+        model.y0 = model.y0 + model.vy * elapsed
+
+        
+        // Process teleportation if x,y out of bounds
+        if (model.y0 < 0) {
+            model.y0 = 300;
+        }
+        if (model.y0 > 300) {
+            model.y0 = 0;
+        }
+        if (model.x0 < 0) {
+            model.x0 = 300;
+        }
+        if (model.x0 > 300) {
+            model.x0 = 0;
+        }
+
+        //bullet speed
+        //totalElapsed = 0
+        if(model.keyboard.Space == true) {
+            console.log("hola")
+            //var f = setTimeout(function(){model.keyboard.Space = false;}, 2000);
+            //console.log(model.keyboard.Space)
+            model.bvx = model.vx - 25 * dx
+            model.bvy = model.vy - 25 * dy
+            model.bx = model.bx + model.bvx * elapsed * -1
+            model.by = model.by + model.bvy * elapsed
+
+        // Make bullet inactive if too old
+        	var f = setTimeout(function(){model.bx = null, model.by = null,
+        		model.keyboard.Space = false;}, 2000);
+        	console.log(model.keyboard.Space)
+    	}
+    //console.log(model.keyboard.Space)
+        // Else, update bullet.x, bullet.y
+        //else {
+        	//model.bx = model.bx + model.bvx * elapsed * -1
+           // model.by = model.by + model.bvy * elapsed
+        //}
+        
+        // MVC: DO NOT DRAW ANYTHING IN animate()
+    }
+
+    /* ### Drawing ### */
+    function drawGuides(ctx) {
+        // Do not call this function once your ship is in 
+        // correct position/correct angle
+        ctx.save()
+        ctx.setTransform(1,0, 0,1, 0,0)
+
+        ctx.beginPath()
+        ctx.rect(model.x0-5, model.y0-5,10,10)
+        ctx.fillStyle="red";
+        ctx.lineWidth = 2;
+        ctx.fill()
+
+        ctx.beginPath()
+        let angleRad = model.angle/180*Math.PI
+        ctx.moveTo(model.x0, model.y0-60)
+        ctx.lineTo(model.x0, model.y0)
+        ctx.lineTo(model.x0+60*Math.sin(angleRad),
+                   model.y0-60*Math.cos(angleRad))
+        ctx.strokeStyle="gray";
+        ctx.lineWidth = 1;
+        ctx.stroke()
+        
+        ctx.beginPath()
+        if (angleRad>=0)
+            ctx.arc(model.x0,model.y0,50,-Math.PI/2,angleRad-Math.PI/2,false);
+        else
+            ctx.arc(model.x0,model.y0,50,-Math.PI/2,angleRad-Math.PI/2,true);
+        ctx.stroke()
+        
+        ctx.strokeStyle="black";
+        ctx.strokeText('<-- Move the ship there', model.x0, model.y0)
+        ctx.restore()
+    }
+    function drawShip(ctx) {
+        ctx.save()
+        ctx.setTransform(1,0, 0,1, 0,0)
+
+        //drawGuides(ctx) // Remove this function when your ship is OK
+                
+        // This ship is not in the correct place, 
+        // use ctx.rotate and ctx.translate to position it correctly
+        //center ship
+        ctx.translate(model.x0, model.y0)
+        //The function for the angles
+        ctx.translate(Math.sin(model.angle*Math.PI/180), Math.cos(model.angle*Math.PI/180))
+        //rotating the ship to the angle
+        ctx.rotate(model.angle*Math.PI/180)
+        
+        ctx.beginPath()
+        ctx.moveTo(0, -20)
+        ctx.lineTo(10, 10)
+        ctx.lineTo(-10, 10)
+        ctx.lineTo(0, -20)
+        ctx.strokeStyle= "Crimson";
+        ctx.lineWidth = 2;
+        ctx.stroke()
+        ctx.restore()
+    }
+    function drawBullet(ctx) {
+        ctx.save()
+        ctx.setTransform(1,0, 0,1, 0,0)
+        ctx.translate(model.bx, model.by)
+        //ctx.translate(Math.sin(model.angle*Math.PI/180), Math.cos(model.angle*Math.PI/180))
+        ctx.rotate(model.angle*Math.PI/180)
+
+        ctx.beginPath()
+        ctx.moveTo(0, -20)
+        ctx.lineTo(0, -30)
+        ctx.strokeStyle= "black";
+        ctx.lineWidth = 2;
+        ctx.stroke()
+        ctx.restore()
+    }
+
+    function drawAll() {
+        // Reset transform before clearing the canvas
+        ctx.setTransform(1,0,0, 1,0,0)
+        ctx.clearRect(0,0,canvas.width,canvas.height)
+
+        drawShip(ctx)
+        drawBullet(ctx)
+        
+        /* MVC: All drawing code should go here or in auxiliary functions
+            such as drawShip, drawBullet */
+        
+    }
+
+    /* ### Initialization ### */ 
+    function start() {
+        canvas = document.getElementById('canvas');
+        ctx = canvas.getContext('2d');
+        
+        w = canvas.width;
+        h = canvas.height;
+
+        // Do init
+        initModel()
+        initGUI()
+        initKeys(canvas)
+        
+        // Force draw for the first time
+        drawAll()
+
+        // Launch main animation loop
+        onTick()
+    }
+</script>
+
+<body onload="start();">
+    <h2>Asteroid - STEPHANIE M. RAMOS CAMACHO</h2>
+    <table><tbody><tr>
+    
+    <td>
+    <table><tbody>
+    <tr>
+    <td><canvas id="canvas" width="300" height="300"></canvas></td>
+    </tr>
+    <tr>
+    <td>Canvas
+        <br><h4>Description</h4></br>
+        If you slect the CONTROLS of the GUI, you can move the ship manually. If you press arrow up or the "i" key, the will be moving forward direction. If you press the down arroe or the "k" key, the ship will be moving backward direction. If you press the right arrow or the "l", key, the ship will rotate clockwise. If you press left arrow or "j" key, the ship will rotate counter-clockwise. If you press the "space" key, some bullet are going to appear, but after 2 seconds it will dissapear. <h4>WARNING!</h4> You have to wait until the bullet dissapear to make a new one, pressing againg the "space" key.
+    </td>
+    </tr>
+    <tr>
+    <td><small><span id="text"></span></small></td>
+    </tr>
+    </tbody></table>
+    </td>
+    
+</body>
+</html>   
